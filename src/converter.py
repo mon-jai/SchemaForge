@@ -95,11 +95,90 @@ class Converter:
             logger.warning(f"Type coercion failed for value {value} to type {type_str}: {e}")
             return value
     
-    def _load_json_file(self, filepath: Path) -> List[Dict[str, Any]]:
-        """Load JSON data from a file, handling both array and NDJSON formats.
+    def _extract_columns_from_metadata(self, metadata: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+        """Extract column definitions from metadata (e.g., Socrata/OpenData format)."""
+        # Try various metadata paths
+        metadata_paths = [
+            ['meta', 'view', 'columns'],
+            ['view', 'columns'],
+            ['columns'],
+            ['schema', 'fields'],
+            ['fields'],
+            ['header']
+        ]
         
-        Also handles top-level objects with a 'data', 'results', 'items', or 'records' 
-        field containing an array of records.
+        for path in metadata_paths:
+            current = metadata
+            found = True
+            for key in path:
+                if isinstance(current, dict) and key in current:
+                    current = current[key]
+                else:
+                    found = False
+                    break
+            
+            if found and isinstance(current, list) and len(current) > 0:
+                # Check if it looks like column definitions
+                if isinstance(current[0], dict) and ('name' in current[0] or 'fieldName' in current[0]):
+                    logger.info(f"Found column definitions in metadata path: {' -> '.join(path)}")
+                    return current
+        
+        return None
+    
+    def _convert_array_row_to_object(self, row: List[Any], columns: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Convert an array-based row to an object using column definitions."""
+        record = {}
+        
+        for col_def in columns:
+            # Get column name - try multiple field names
+            col_name = None
+            for name_field in ['fieldName', 'name', 'id', 'key']:
+                if name_field in col_def:
+                    col_name = str(col_def[name_field])
+                    break
+            
+            if col_name is None:
+                # Fallback to position-based name
+                position = col_def.get('position', len(record))
+                col_name = f"column_{position}"
+            
+            # Skip hidden/meta columns if flagged
+            if col_def.get('flags') and 'hidden' in col_def.get('flags', []):
+                continue
+            
+            # Skip meta_data type columns by default (can be overridden)
+            if col_def.get('dataTypeName') == 'meta_data' and 'hidden' in col_def.get('flags', []):
+                continue
+            
+            # Get value from row using position
+            position = col_def.get('position', -1)
+            
+            # If position is valid and within row bounds
+            if position >= 0 and position < len(row):
+                value = row[position]
+            else:
+                # Fallback: try to use index in columns list
+                col_idx = columns.index(col_def) if col_def in columns else -1
+                if col_idx >= 0 and col_idx < len(row):
+                    value = row[col_idx]
+                else:
+                    continue  # Skip if we can't map this column
+            
+            # Clean column name (remove : prefix if present)
+            clean_name = col_name.lstrip(':')
+            record[clean_name] = value
+        
+        return record
+    
+    def _load_json_file(self, filepath: Path) -> List[Dict[str, Any]]:
+        """Load JSON data from a file, handling multiple formats:
+        
+        - Standard JSON array of objects
+        - NDJSON (newline-delimited JSON)
+        - Wrapper objects with data arrays (data, results, items, records, rows, entries)
+        - Array-based tabular data (arrays of arrays) with column metadata
+        - GeoJSON format
+        - Single JSON object (treated as single record)
         """
         records = []
         
@@ -111,33 +190,83 @@ class Converter:
                     logger.warning(f"File {filepath.name} is empty")
                     return records
                 
-                # Try to parse as JSON array first
+                # Try to parse as JSON first
                 try:
                     data = json.loads(content)
+                    
+                    # Handle different top-level structures
                     if isinstance(data, list):
-                        records = data
+                        # Check if it's an array of arrays (tabular format)
+                        if len(data) > 0 and isinstance(data[0], list):
+                            logger.info(f"Detected array-based tabular format in {filepath.name}")
+                            # Try to find column metadata by looking for a wrapper structure
+                            # This format usually comes from APIs, so we'll create generic column names
+                            if len(data) > 0:
+                                max_cols = max(len(row) for row in data if isinstance(row, list))
+                                columns = [{'name': f'column_{i}', 'position': i} for i in range(max_cols)]
+                                records = [self._convert_array_row_to_object(row, columns) for row in data]
+                            return records
+                        else:
+                            # Regular array of objects
+                            records = data
+                    
                     elif isinstance(data, dict):
-                        # Check if this is a wrapper object with a data array
-                        # Common field names: data, results, items, records
+                        # Check for array-based tabular data with metadata
                         data_fields = ['data', 'results', 'items', 'records', 'rows', 'entries']
-                        extracted_records = None
+                        extracted_data = None
+                        data_field_name = None
                         
                         for field_name in data_fields:
                             if field_name in data and isinstance(data[field_name], list):
-                                extracted_records = data[field_name]
-                                logger.info(f"Found {len(extracted_records)} records in '{field_name}' field of {filepath.name}")
+                                extracted_data = data[field_name]
+                                data_field_name = field_name
                                 break
                         
-                        if extracted_records is not None:
-                            records = extracted_records
+                        if extracted_data is not None:
+                            # Check if it's array-based tabular format
+                            if len(extracted_data) > 0 and isinstance(extracted_data[0], list):
+                                logger.info(f"Detected array-based tabular format in '{data_field_name}' field")
+                                # Try to extract column definitions from metadata
+                                columns = self._extract_columns_from_metadata(data)
+                                
+                                if columns:
+                                    # Use all columns but the conversion function will skip hidden ones
+                                    # Position in column definitions matches array index
+                                    records = [
+                                        self._convert_array_row_to_object(row, columns) 
+                                        for row in extracted_data
+                                    ]
+                                else:
+                                    # No column metadata found, create generic column names
+                                    if len(extracted_data) > 0:
+                                        max_cols = max(len(row) for row in extracted_data if isinstance(row, list))
+                                        columns = [{'name': f'column_{i}', 'position': i} for i in range(max_cols)]
+                                        records = [
+                                            self._convert_array_row_to_object(row, columns) 
+                                            for row in extracted_data
+                                        ]
+                            else:
+                                # Regular array of objects
+                                records = extracted_data
+                                logger.info(f"Found {len(records)} records in '{data_field_name}' field")
                         else:
-                            # Treat the dict itself as a single record
-                            records = [data]
+                            # Check for GeoJSON format
+                            if data.get('type') == 'FeatureCollection' and 'features' in data:
+                                logger.info("Detected GeoJSON FeatureCollection format")
+                                records = [feature.get('properties', {}) for feature in data.get('features', [])]
+                            elif data.get('type') == 'Feature':
+                                logger.info("Detected GeoJSON Feature format")
+                                records = [data.get('properties', {})]
+                            else:
+                                # Treat the dict itself as a single record
+                                records = [data]
                     else:
-                        logger.warning(f"Unexpected JSON structure in {filepath.name}")
+                        logger.warning(f"Unexpected JSON structure in {filepath.name}: {type(data)}")
                         return records
+                
                 except json.JSONDecodeError:
                     # Try NDJSON format (one JSON object per line)
+                    logger.info(f"Trying NDJSON format for {filepath.name}")
                     f.seek(0)
                     for line_num, line in enumerate(f, 1):
                         line = line.strip()
@@ -159,6 +288,9 @@ class Converter:
                                     records.extend(extracted_records)
                                 else:
                                     records.append(record)
+                            elif isinstance(record, list):
+                                # Array in NDJSON line
+                                records.extend(record)
                         except json.JSONDecodeError as e:
                             logger.warning(f"Failed to parse line {line_num} in {filepath.name}: {e}")
                             continue
@@ -167,7 +299,17 @@ class Converter:
             logger.error(f"Error reading file {filepath.name}: {e}")
             raise
         
-        return records
+        # Ensure all records are dictionaries
+        valid_records = []
+        for record in records:
+            if isinstance(record, dict):
+                valid_records.append(record)
+            elif isinstance(record, list):
+                # Convert array to object with indexed keys
+                valid_records.append({f'field_{i}': val for i, val in enumerate(record)})
+        
+        logger.info(f"Loaded {len(valid_records)} records from {filepath.name}")
+        return valid_records
     
     def _prepare_dataframe(self, records: List[Dict[str, Any]], schema: FileSchema) -> pd.DataFrame:
         """Prepare a pandas DataFrame from records using the schema."""
