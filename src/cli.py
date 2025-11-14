@@ -64,10 +64,31 @@ def convert_files(args):
         logger.error(f"Unsupported format: {args.format}. Supported formats: parquet, csv")
         return 1
     
+    # Determine schema report path
+    schema_report_path = args.schema_report
+    if not schema_report_path:
+        # Auto-detect: if markdown report path is provided, use corresponding JSON
+        if args.schema_report_md:
+            schema_report_path = Path(args.schema_report_md).with_suffix('.json')
+        else:
+            # Default: use default report path
+            schema_report_path = "reports/schema_report.json"
+    
+    schema_report_path = str(Path(schema_report_path).resolve())
+    
+    # Check if schema report exists
+    if not Path(schema_report_path).exists():
+        logger.error(
+            f"Schema report not found: {schema_report_path}\n"
+            "Please run 'scan-schemas' command first to generate a schema report."
+        )
+        return 1
+    
     try:
         converter = Converter(
             data_dir=args.data_dir,
-            output_dir=args.output_dir
+            output_dir=args.output_dir,
+            schema_report_path=schema_report_path
         )
         
         results = converter.convert_all(args.format.lower())
@@ -154,6 +175,20 @@ def main():
         type=str,
         default='output',
         help='Directory for output files (default: output)'
+    )
+    convert_parser.add_argument(
+        '--schema-report',
+        type=str,
+        default=None,
+        help='Path to schema report JSON file (default: reports/schema_report.json). '
+             'Schema report must be generated first using scan-schemas command.'
+    )
+    convert_parser.add_argument(
+        '--schema-report-md',
+        type=str,
+        default=None,
+        help='Path to schema report Markdown file (alternative to --schema-report). '
+             'The corresponding JSON file will be used automatically.'
     )
     
     args = parser.parse_args()

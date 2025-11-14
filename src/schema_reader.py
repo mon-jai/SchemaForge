@@ -397,5 +397,92 @@ class SchemaReader:
             f.write(report_content)
         
         logger.info(f"Schema report written to {output_file}")
+        
+        # Also save schemas in JSON format for machine reading
+        json_path = output_file.with_suffix('.json')
+        self.save_schemas_to_json(str(json_path))
+        
         return str(output_file)
+    
+    def save_schemas_to_json(self, output_path: str = "reports/schema_report.json") -> str:
+        """Save schemas to JSON format for machine reading."""
+        if not self.schemas:
+            logger.warning("No schemas available. Run scan_directory() first.")
+            return ""
+        
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        schemas_dict = {}
+        for filename, schema in self.schemas.items():
+            schema_data = {
+                "filename": schema.filename,
+                "record_count": schema.record_count,
+                "fields": {}
+            }
+            
+            for field_name, field in schema.fields.items():
+                # Convert field_type to serializable format
+                if isinstance(field.field_type, set):
+                    field_type_serialized = list(field.field_type)
+                else:
+                    field_type_serialized = field.field_type
+                
+                schema_data["fields"][field_name] = {
+                    "name": field.name,
+                    "field_type": field_type_serialized,
+                    "nullable": field.nullable,
+                    "example_value": str(field.example_value) if field.example_value is not None else None,
+                    "is_nested": field.is_nested,
+                    "nested_fields": field.nested_fields if field.nested_fields else {}
+                }
+            
+            schemas_dict[filename] = schema_data
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(schemas_dict, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Schemas saved to JSON: {output_file}")
+        return str(output_file)
+    
+    @classmethod
+    def load_schemas_from_json(cls, json_path: str) -> Dict[str, FileSchema]:
+        """Load schemas from a JSON file."""
+        json_file = Path(json_path)
+        
+        if not json_file.exists():
+            raise FileNotFoundError(f"Schema report JSON not found: {json_path}")
+        
+        with open(json_file, 'r', encoding='utf-8') as f:
+            schemas_dict = json.load(f)
+        
+        schemas = {}
+        for filename, schema_data in schemas_dict.items():
+            fields = {}
+            
+            for field_name, field_data in schema_data["fields"].items():
+                # Convert field_type back from serialized format
+                field_type = field_data["field_type"]
+                if isinstance(field_type, list):
+                    field_type = set(field_type)
+                
+                field = SchemaField(
+                    name=field_data["name"],
+                    field_type=field_type,
+                    nullable=field_data["nullable"],
+                    example_value=field_data.get("example_value"),
+                    is_nested=field_data.get("is_nested", False),
+                    nested_fields=field_data.get("nested_fields", {})
+                )
+                fields[field_name] = field
+            
+            schema = FileSchema(
+                filename=schema_data["filename"],
+                record_count=schema_data["record_count"],
+                fields=fields
+            )
+            schemas[filename] = schema
+        
+        logger.info(f"Loaded {len(schemas)} schema(s) from {json_path}")
+        return schemas
 

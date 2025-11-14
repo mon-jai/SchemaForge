@@ -21,7 +21,8 @@ class Converter:
     """Main class for converting JSON files to other formats."""
     
     def __init__(self, data_dir: str = "data", output_dir: str = "output",
-                 schema_reader: Optional[SchemaReader] = None):
+                 schema_reader: Optional[SchemaReader] = None,
+                 schema_report_path: Optional[str] = None):
         """
         Initialize the Converter.
         
@@ -29,10 +30,12 @@ class Converter:
             data_dir: Directory containing JSON files
             output_dir: Directory for output files
             schema_reader: Optional SchemaReader instance (will create one if not provided)
+            schema_report_path: Path to schema report JSON file (required for conversion)
         """
         self.data_dir = Path(data_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.schema_report_path = schema_report_path
         
         if schema_reader is None:
             self.schema_reader = SchemaReader(data_dir=data_dir)
@@ -281,7 +284,10 @@ class Converter:
             return False
     
     def convert_all(self, format_type: str) -> Dict[str, bool]:
-        """Convert all JSON files in the data directory to the specified format."""
+        """Convert all JSON files in the data directory to the specified format.
+        
+        Requires a schema report to be generated first using scan-schemas command.
+        """
         if not self.data_dir.exists():
             raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
         
@@ -291,14 +297,37 @@ class Converter:
             logger.warning(f"No JSON files found in {self.data_dir}")
             return {}
         
-        # First, scan all schemas
-        logger.info("Scanning schemas for all files...")
-        schemas = self.schema_reader.scan_directory()
+        # Load schemas from schema report JSON file
+        if not self.schema_report_path:
+            raise ValueError(
+                "Schema report path is required. Please run 'scan-schemas' command first "
+                "to generate a schema report, then provide the path using --schema-report option."
+            )
+        
+        logger.info(f"Loading schemas from schema report: {self.schema_report_path}")
+        try:
+            schemas = SchemaReader.load_schemas_from_json(self.schema_report_path)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Schema report not found: {self.schema_report_path}. "
+                "Please run 'scan-schemas' command first to generate a schema report."
+            ) from e
+        
+        if not schemas:
+            raise ValueError("No schemas found in the schema report. Please regenerate the schema report.")
         
         results = {}
         
         for json_file in json_files:
             schema = schemas.get(json_file.name)
+            
+            if schema is None:
+                logger.warning(
+                    f"No schema found for {json_file.name} in the schema report. "
+                    "Skipping this file. Please regenerate the schema report."
+                )
+                results[json_file.name] = False
+                continue
             
             if format_type.lower() == "parquet":
                 success = self.convert_to_parquet(json_file, schema)
