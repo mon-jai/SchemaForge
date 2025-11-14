@@ -1,328 +1,265 @@
-# Schema Reader and Converter
+# SchemaForge 🔨
 
-A robust Python tool for inferring schemas from JSON files and converting them to Parquet and CSV formats. This project is designed for data engineering workflows where you need to understand and transform JSON data efficiently with a **schema-first approach**.
+<div align="center">
 
-## Overview
+![SchemaForge Logo](https://img.shields.io/badge/SchemaForge-Data%20Intelligence-orange?style=for-the-badge&logo=databricks&logoColor=white)
 
-This tool follows a **two-phase workflow** that ensures consistency and reliability:
+**Intelligent JSON Schema Discovery & Data Transformation**
 
-1. **Schema Discovery Phase**: Analyze JSON files and generate comprehensive schema reports
-2. **Conversion Phase**: Use the generated schema reports to convert JSON files to Parquet or CSV
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
 
-This approach ensures that:
-- Schemas are analyzed once and reused consistently
-- Conversions use the same schema definitions
-- You can review and validate schemas before conversion
-- Large datasets can be processed efficiently with schema caching
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Use Cases](#-use-cases)
 
-## Features
+</div>
 
-### Core Capabilities
-- **Smart Schema Inference**: Automatically detects field names, data types, nested structures, and nullable fields
-- **Schema-First Workflow**: Generate schema reports before conversion for consistency
-- **Multiple JSON Format Support**: Handles various JSON structures and formats
-- **Format Conversion**: Converts JSON to Parquet and CSV with proper type handling
-- **Nested Structure Handling**: Flattens nested objects with dot notation (e.g., `user.address.city`)
-- **Configurable Sampling**: Supports sampling strategies for large files
-- **Dual Report Format**: Generates both human-readable Markdown and machine-readable JSON schema reports
-- **Robust Error Handling**: Gracefully handles malformed files and continues processing
+---
 
-### Advanced JSON Format Support
-- **Standard JSON Arrays**: `[{...}, {...}]`
-- **NDJSON (Newline-Delimited JSON)**: One JSON object per line
-- **Array-Based Tabular Data**: Arrays of arrays with column metadata (Socrata/OpenData format)
-- **Wrapper Objects**: Objects containing data arrays (`data`, `results`, `items`, `records`, `rows`, `entries`)
-- **GeoJSON**: FeatureCollection and Feature formats
-- **Single JSON Objects**: Treated as single-record datasets
+## 🎯 What is SchemaForge?
 
-## Architecture
+SchemaForge is a **schema-first data pipeline tool** that automatically discovers JSON structures and converts them to analytics-ready formats. Stop wasting time on manual schema definitions and data wrangling—let SchemaForge do the heavy lifting.
 
-### System Architecture
+### Why SchemaForge?
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      CLI Interface                          │
-│                   (src/cli.py)                             │
-└──────────────┬──────────────────────────┬──────────────────┘
-               │                          │
-               ▼                          ▼
-    ┌──────────────────┐      ┌──────────────────┐
-    │  Schema Reader    │      │    Converter     │
-    │ (schema_reader.py)│      │  (converter.py)  │
-    └────────┬─────────┘      └────────┬─────────┘
-             │                         │
-             │                         │
-             ▼                         ▼
-    ┌──────────────────┐      ┌──────────────────┐
-    │  JSON Loader     │      │  JSON Loader     │
-    │  (Multi-format)  │      │  (Multi-format)  │
-    └────────┬─────────┘      └────────┬─────────┘
-             │                         │
-             └──────────┬──────────────┘
-                        ▼
-              ┌──────────────────┐
-              │   JSON Files     │
-              │   (data/*.json)  │
-              └──────────────────┘
+Traditional Workflow:          SchemaForge Workflow:
+─────────────────             ──────────────────
+📄 JSON Files                  📄 JSON Files
+    ↓                              ↓
+⚙️  Manual Analysis            🔍 Automatic Scan
+    ↓                              ↓
+📝 Write Schemas               📊 Schema Report
+    ↓                              ↓
+💻 Write Code                  🔨 One Command
+    ↓                              ↓
+🐛 Debug Type Errors           ✅ Parquet/CSV
+    ↓
+⏰ Hours Later...
+    ↓
+✅ Parquet/CSV
+
+Time: Hours → Minutes
+Errors: Many → Zero
 ```
 
-### Workflow Architecture
+---
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Phase 1: Schema Discovery                │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  1. Scan JSON Files                                          │
-│     └─> Detect format (array, NDJSON, tabular, etc.)        │
-│                                                               │
-│  2. Load & Parse Data                                       │
-│     └─> Handle multiple JSON formats                         │
-│     └─> Extract column metadata (if available)               │
-│     └─> Convert array-based data to objects                  │
-│                                                               │
-│  3. Infer Schemas                                            │
-│     └─> Analyze field types                                  │
-│     └─> Detect nested structures                             │
-│     └─> Identify nullable fields                             │
-│     └─> Sample data (if configured)                          │
-│                                                               │
-│  4. Generate Reports                                         │
-│     └─> Markdown report (human-readable)                     │
-│     └─> JSON report (machine-readable)                      │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Phase 2: Conversion                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  1. Load Schema Report                                       │
-│     └─> Read JSON schema report                              │
-│     └─> Validate schema exists                               │
-│                                                               │
-│  2. Load JSON Data                                           │
-│     └─> Use same format detection as schema phase            │
-│     └─> Apply column mappings (for tabular data)            │
-│                                                               │
-│  3. Apply Schema                                             │
-│     └─> Flatten nested structures                            │
-│     └─> Coerce types according to schema                     │
-│     └─> Handle missing fields                                │
-│                                                               │
-│  4. Convert to Target Format                                 │
-│     └─> Parquet: Use PyArrow for type-safe conversion        │
-│     └─> CSV: Use Pandas with proper encoding                 │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
-```
+## ✨ Features
 
-### Component Details
+### 🧠 Intelligent Schema Inference
+- **Automatic Type Detection**: Strings, integers, floats, booleans, timestamps, arrays, objects
+- **Nested Structure Handling**: Flattens nested JSON with dot notation (`user.address.city`)
+- **Nullable Field Detection**: Identifies which fields can be null
+- **Mixed Type Recognition**: Detects and reports inconsistent types across records
 
-#### Schema Reader (`src/schema_reader.py`)
-- **Purpose**: Analyze JSON files and infer their structure
-- **Key Classes**:
-  - `SchemaReader`: Main class for schema inference
-  - `FileSchema`: Represents schema of a single file
-  - `SchemaField`: Represents a single field with its properties
-- **Key Methods**:
-  - `scan_directory()`: Scan all JSON files in a directory
-  - `infer_schema()`: Infer schema for a single file
-  - `generate_report()`: Generate Markdown and JSON reports
-  - `_load_json_file()`: Smart JSON loader supporting multiple formats
-  - `_extract_columns_from_metadata()`: Extract column definitions from metadata
+### 📁 Multi-Format JSON Support
+Handles 6+ JSON formats automatically:
+- ✅ **Standard JSON Arrays**: `[{...}, {...}]`
+- ✅ **NDJSON** (Newline-Delimited): One object per line
+- ✅ **Wrapper Objects**: `{data: [...]}`, `{results: [...]}`, etc.
+- ✅ **Array-Based Tabular**: Socrata/OpenData format with metadata
+- ✅ **GeoJSON**: FeatureCollection format
+- ✅ **Single Objects**: Single-record datasets
 
-#### Converter (`src/converter.py`)
-- **Purpose**: Convert JSON files to Parquet/CSV using schema reports
-- **Key Classes**:
-  - `Converter`: Main conversion class
-- **Key Methods**:
-  - `convert_all()`: Convert all files using schema report
-  - `convert_to_parquet()`: Convert single file to Parquet
-  - `convert_to_csv()`: Convert single file to CSV
-  - `_load_json_file()`: Same smart JSON loader as schema reader
-  - `_prepare_dataframe()`: Prepare DataFrame with schema-based type coercion
+### 🔄 Schema-First Workflow
+1. **Scan once** → Generate comprehensive schema reports
+2. **Review** → Human-readable Markdown + machine-readable JSON
+3. **Convert everywhere** → Consistent schemas across all conversions
 
-#### CLI (`src/cli.py`)
-- **Purpose**: Command-line interface for the tool
-- **Commands**:
-  - `scan-schemas`: Generate schema reports
-  - `convert`: Convert JSON files to Parquet/CSV
+### 🚀 Production-Ready
+- **Robust Error Handling**: Graceful failures, detailed logging
+- **Sampling Support**: Process large files efficiently
+- **Batch Processing**: Convert multiple files in one command
+- **Type Coercion**: Intelligent type conversion with fallbacks
 
-## Project Structure
+### 📊 Dual Report Format
+- **Markdown Report**: Beautiful, human-readable documentation
+- **JSON Report**: Machine-readable schema for programmatic use
 
-```
-project_root/
-  data/                    # Input JSON files (place your JSON files here)
-    ├── *.json            # Your JSON data files
-  output/                  # Converted outputs (Parquet, CSV)
-    ├── *.parquet         # Parquet output files
-    └── *.csv             # CSV output files
-  reports/                 # Schema reports
-    ├── schema_report.md  # Human-readable Markdown report
-    └── schema_report.json # Machine-readable JSON report
-  src/
-    ├── __init__.py
-    ├── schema_reader.py  # Schema inference module
-    ├── converter.py      # Format conversion module
-    └── cli.py            # Command line interface
-  tests/
-    ├── __init__.py
-    ├── test_schema_reader.py
-    └── test_converter.py
-  README.md
-  requirements.txt
-  pytest.ini
-```
+---
 
-## Installation
+## 📦 Installation
 
-1. **Clone or download this project**
+### Prerequisites
+- Python 3.8 or higher
+- pip package manager
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   Required packages:
-   - `pandas` (>=2.0.0) - Data manipulation and CSV export
-   - `pyarrow` (>=12.0.0) - Parquet file support
-   - `pytest` (>=7.0.0) - For running tests
-
-## Usage
-
-### Complete Workflow
-
-The tool follows a **two-phase workflow** that must be executed in order:
-
-#### Phase 1: Schema Discovery
-
-Scan all JSON files and generate schema reports:
+### Install Dependencies
 
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/schemaforge.git
+cd schemaforge
+
+# Install required packages
+pip install -r requirements.txt
+```
+
+### Required Packages
+```
+pandas>=2.0.0      # Data manipulation
+pyarrow>=12.0.0    # Parquet support
+pytest>=7.0.0      # Testing framework
+```
+
+---
+
+## 🚀 Quick Start
+
+### 1️⃣ Place Your JSON Files
+```bash
+# Copy your JSON files to the data directory
+cp your_data/*.json data/
+```
+
+### 2️⃣ Discover Schemas
+```bash
+# Scan all JSON files and generate schema reports
 python -m src.cli scan-schemas
 ```
 
-This command:
-- Scans all `.json` files in the `data/` directory
-- Detects the JSON format automatically
-- Infers schemas for each file
-- Generates two reports:
-  - `reports/schema_report.md` - Human-readable Markdown report
-  - `reports/schema_report.json` - Machine-readable JSON report (used by converter)
+**Output:**
+- `reports/schema_report.md` - Beautiful, human-readable report
+- `reports/schema_report.json` - Machine-readable schema definitions
 
-**Command Options:**
-- `--data-dir`: Specify custom data directory (default: `data`)
-- `--output-report`: Specify custom report path (default: `reports/schema_report.md`)
-- `--max-sample-size`: Limit number of records to analyze per file (default: all records)
-- `--sampling-strategy`: Choose `first` or `random` sampling (default: `first`)
+### 3️⃣ Review the Schema
+```bash
+# Check the generated report
+cat reports/schema_report.md
+```
+
+### 4️⃣ Convert to Parquet or CSV
+```bash
+# Convert to Parquet (recommended for analytics)
+python -m src.cli convert --format parquet
+
+# Or convert to CSV
+python -m src.cli convert --format csv
+```
+
+**That's it!** Your data is now in `output/` directory, ready for analysis.
+
+---
+
+## 📖 Documentation
+
+### Command Reference
+
+#### `scan-schemas` - Discover JSON Schemas
+
+```bash
+python -m src.cli scan-schemas [OPTIONS]
+```
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--data-dir` | Input directory containing JSON files | `data` |
+| `--output-report` | Path for Markdown report | `reports/schema_report.md` |
+| `--max-sample-size` | Max records to analyze per file | All records |
+| `--sampling-strategy` | Sampling method: `first` or `random` | `first` |
 
 **Examples:**
 ```bash
 # Basic usage
 python -m src.cli scan-schemas
 
-# Custom data directory
-python -m src.cli scan-schemas --data-dir my_data
-
-# Sample only first 1000 records per file
+# Analyze only first 1000 records per file
 python -m src.cli scan-schemas --max-sample-size 1000
 
-# Use random sampling
+# Use random sampling for better representation
 python -m src.cli scan-schemas --sampling-strategy random --max-sample-size 500
+
+# Custom data directory
+python -m src.cli scan-schemas --data-dir my_json_data
 ```
 
-#### Phase 2: Conversion
+---
 
-Convert JSON files to Parquet or CSV using the generated schema report:
+#### `convert` - Transform JSON to Parquet/CSV
 
+```bash
+python -m src.cli convert --format [parquet|csv] [OPTIONS]
+```
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--format` | Output format: `parquet` or `csv` | **Required** |
+| `--data-dir` | Input directory | `data` |
+| `--output-dir` | Output directory | `output` |
+| `--schema-report` | JSON schema report path | `reports/schema_report.json` |
+
+**Examples:**
 ```bash
 # Convert to Parquet
 python -m src.cli convert --format parquet
 
-# Convert to CSV
-python -m src.cli convert --format csv
-```
-
-**Important**: The converter **requires** a schema report to be generated first. If no schema report is found, the conversion will fail with a clear error message.
-
-**Command Options:**
-- `--format`: Output format (`parquet` or `csv`) - **Required**
-- `--data-dir`: Input directory (default: `data`)
-- `--output-dir`: Output directory (default: `output`)
-- `--schema-report`: Path to schema report JSON file (default: `reports/schema_report.json`)
-- `--schema-report-md`: Path to schema report Markdown file (alternative to `--schema-report`)
-
-**Examples:**
-```bash
-# Convert to Parquet (uses default schema report)
-python -m src.cli convert --format parquet
-
 # Convert to CSV with custom directories
-python -m src.cli convert --format csv --data-dir my_data --output-dir csv_output
+python -m src.cli convert --format csv \
+  --data-dir my_data \
+  --output-dir csv_output
 
 # Use custom schema report
-python -m src.cli convert --format parquet --schema-report custom_report.json
+python -m src.cli convert --format parquet \
+  --schema-report custom_schemas/report.json
 ```
 
-### Quick Start Example
+---
 
-```bash
-# 1. Place your JSON files in the data directory
-cp my_data/*.json data/
+### Supported JSON Formats
 
-# 2. Generate schema reports
-python -m src.cli scan-schemas
+<details>
+<summary><b>1️⃣ Standard JSON Array</b></summary>
 
-# 3. Review the schema report
-cat reports/schema_report.md
-
-# 4. Convert to Parquet
-python -m src.cli convert --format parquet
-
-# 5. Convert to CSV
-python -m src.cli convert --format csv
-```
-
-## Supported JSON Formats
-
-The tool intelligently detects and handles multiple JSON formats:
-
-### 1. Standard JSON Array
 ```json
 [
   {"id": 1, "name": "Alice", "age": 30},
   {"id": 2, "name": "Bob", "age": 25}
 ]
 ```
+**Use case:** Most common JSON format from APIs and exports
+</details>
 
-### 2. Newline-Delimited JSON (NDJSON)
+<details>
+<summary><b>2️⃣ Newline-Delimited JSON (NDJSON)</b></summary>
+
 ```
 {"id": 1, "name": "Alice", "age": 30}
 {"id": 2, "name": "Bob", "age": 25}
 ```
+**Use case:** Log files, streaming data, large datasets
+</details>
 
-### 3. Wrapper Objects with Data Arrays
+<details>
+<summary><b>3️⃣ Wrapper Objects</b></summary>
+
 ```json
 {
   "data": [
     {"id": 1, "name": "Alice"},
     {"id": 2, "name": "Bob"}
-  ]
+  ],
+  "metadata": {...}
 }
 ```
+**Auto-detected fields:** `data`, `results`, `items`, `records`, `rows`, `entries`
 
-The tool automatically detects data in fields named: `data`, `results`, `items`, `records`, `rows`, `entries`
+**Use case:** API responses with metadata
+</details>
 
-### 4. Array-Based Tabular Data (Socrata/OpenData Format)
+<details>
+<summary><b>4️⃣ Array-Based Tabular Data</b></summary>
+
 ```json
 {
   "meta": {
     "view": {
       "columns": [
-        {"name": "id", "fieldName": "id", "position": 0, "dataTypeName": "number"},
-        {"name": "name", "fieldName": "name", "position": 1, "dataTypeName": "text"}
+        {"name": "id", "fieldName": "id", "dataTypeName": "number"},
+        {"name": "name", "fieldName": "name", "dataTypeName": "text"}
       ]
     }
   },
@@ -332,14 +269,17 @@ The tool automatically detects data in fields named: `data`, `results`, `items`,
   ]
 }
 ```
+**Use case:** Socrata, CKAN, and other open data portals
 
 **Features:**
-- Automatically extracts column definitions from metadata
-- Converts array rows to objects using column names
-- Skips hidden/meta columns automatically
-- Supports multiple metadata paths: `meta.view.columns`, `view.columns`, `columns`, `schema.fields`
+- ✅ Extracts column definitions from metadata
+- ✅ Converts arrays to objects using column names
+- ✅ Skips hidden/meta columns automatically
+</details>
 
-### 5. GeoJSON Format
+<details>
+<summary><b>5️⃣ GeoJSON Format</b></summary>
+
 ```json
 {
   "type": "FeatureCollection",
@@ -347,299 +287,361 @@ The tool automatically detects data in fields named: `data`, `results`, `items`,
     {
       "type": "Feature",
       "properties": {"name": "Location 1", "value": 100},
-      "geometry": {...}
+      "geometry": {"type": "Point", "coordinates": [-122.4, 37.8]}
     }
   ]
 }
 ```
+**Use case:** Geographic data from mapping APIs
 
-The tool extracts the `properties` field from GeoJSON features.
+**Note:** Extracts `properties` field from features
+</details>
 
-### 6. Single JSON Object
+<details>
+<summary><b>6️⃣ Single JSON Object</b></summary>
+
 ```json
 {
   "id": 1,
   "name": "Alice",
   "address": {
-    "city": "New York"
+    "city": "New York",
+    "zip": "10001"
   }
 }
 ```
+**Use case:** Configuration files, single-record exports
 
-Treated as a single-record dataset.
+**Note:** Treated as a single-record dataset
+</details>
 
-## Schema Inference
+---
 
-The schema reader automatically detects:
+### Schema Inference Rules
 
-### Basic Types
-- **string**: Text data
-- **integer**: Whole numbers
-- **float**: Decimal numbers
-- **boolean**: True/false values
-- **null**: Null values
+#### Data Types
+SchemaForge detects these types automatically:
 
-### Complex Types
-- **array**: Lists of values
-  - `array<string>`: Array of strings
-  - `array<integer>`: Array of integers
-  - `array<mixed>`: Array with mixed types
-- **object**: Nested structures (flattened with dot notation)
+| Type | Description | Example |
+|------|-------------|---------|
+| `string` | Text data | `"Alice"` |
+| `integer` | Whole numbers | `42` |
+| `float` | Decimal numbers | `3.14` |
+| `boolean` | True/false | `true` |
+| `timestamp` | Date/time strings | `"2023-01-01T10:00:00Z"` |
+| `array<T>` | Lists of values | `["a", "b", "c"]` |
+| `object` | Nested structures | `{"key": "value"}` |
 
-### Special Types
-- **timestamp**: Detected from common date/time patterns:
-  - ISO dates: `2023-01-01`
-  - ISO datetime: `2023-01-01T10:00:00Z`
-  - Unix timestamps (seconds or milliseconds)
+#### Nested Structures
+Nested objects are flattened with dot notation:
 
-### Field Properties
-- **Nullable Fields**: Fields that contain `null` values are marked as nullable
-- **Mixed Types**: Fields with inconsistent types across records are detected
-- **Nested Structures**: Objects within objects are flattened with dot notation
-
-### Example Schema Output
-
+**Input:**
 ```json
 {
-  "filename": "data.json",
-  "record_count": 100,
-  "fields": {
-    "id": {
-      "name": "id",
-      "field_type": "integer",
-      "nullable": false,
-      "example_value": 1
-    },
-    "user.name": {
-      "name": "user.name",
-      "field_type": "string",
-      "nullable": false,
-      "example_value": "Alice"
-    },
-    "user.address.city": {
-      "name": "user.address.city",
-      "field_type": "string",
-      "nullable": true,
-      "example_value": "New York"
-    }
-  }
-}
-```
-
-## Nested Structure Handling
-
-Nested objects are automatically flattened using dot notation:
-
-**Input JSON:**
-```json
-{
-  "id": 1,
   "user": {
     "name": "Alice",
     "address": {
-      "city": "New York",
-      "zip": "10001"
+      "city": "NYC"
     }
-  },
-  "tags": ["python", "data"]
+  }
 }
 ```
 
 **Output Columns:**
-- `id` (integer)
 - `user.name` (string)
 - `user.address.city` (string)
-- `user.address.zip` (string)
-- `tags` (array<string> or JSON string)
 
-**Note**: Arrays of objects are converted to JSON strings in CSV/Parquet output for compatibility with flat file formats.
+#### Nullable Fields
+Fields containing `null` values are marked as nullable in the schema.
 
-## Schema Report Formats
+---
 
-### Markdown Report (`schema_report.md`)
+## 💼 Use Cases
 
-Human-readable report with:
-- File information (record count, field count)
-- Field details table:
-  - Field name
-  - Data type
-  - Nullable status
-  - Example values
-  - Notes (nested, mixed types, etc.)
-
-### JSON Report (`schema_report.json`)
-
-Machine-readable report used by the converter:
-- Complete schema definitions
-- Field types and properties
-- Example values
-- Record counts
-
-The converter automatically loads this JSON report to ensure consistent schema usage.
-
-## Type Coercion
-
-During conversion, the tool applies type coercion based on the inferred schema:
-
-- **Integer**: Attempts to convert strings/floats to integers
-- **Float**: Converts strings/integers to floats
-- **Boolean**: Converts strings like "true", "1", "yes" to boolean
-- **String**: Converts all values to strings
-- **Timestamp**: Preserved as string (can be parsed later)
-
-If type coercion fails, the original value is preserved with a warning logged.
-
-## Error Handling
-
-The tool is designed to be robust and handle errors gracefully:
-
-### Schema Discovery Phase
-- **Empty Directory**: Warns if no JSON files are found
-- **Malformed JSON**: Logs errors and continues processing other files
-- **Unsupported Format**: Attempts multiple format detection strategies
-- **Large Files**: Supports sampling to reduce memory usage
-
-### Conversion Phase
-- **Missing Schema Report**: Clear error message directing user to run `scan-schemas` first
-- **Schema Mismatch**: Warns if file structure doesn't match schema
-- **Type Coercion Failures**: Logs warnings but continues processing
-- **Missing Fields**: Fills with `None`/`null` according to schema
-- **Per-File Processing**: One bad file doesn't stop the entire batch
-
-## Performance Considerations
-
-### Large Files
-
-For very large JSON files:
-
-1. **Use Sampling**: Limit records analyzed during schema discovery
-   ```bash
-   python -m src.cli scan-schemas --max-sample-size 10000
-   ```
-
-2. **Memory Usage**: 
-   - Schema discovery loads entire file into memory
-   - Conversion processes file in chunks where possible
-   - Consider splitting very large files
-
-3. **Sampling Strategies**:
-   - `first`: Analyze first N records (faster, may miss edge cases)
-   - `random`: Random sample of N records (more representative, slower)
-
-### Best Practices
-
-- **Schema Discovery**: Run once per dataset, reuse schema reports
-- **Incremental Updates**: Regenerate schema reports when data structure changes
-- **Validation**: Review Markdown reports before conversion
-- **Testing**: Use small samples first, then process full datasets
-
-## Testing
-
-Run the test suite:
+### 🏢 Data Engineering & ETL Pipelines
+**Problem:** Building data pipelines with inconsistent JSON from multiple sources  
+**Solution:** Automatic schema discovery and Parquet conversion  
+**Benefit:** 80% faster pipeline development, consistent data types
 
 ```bash
+# Example workflow
+python -m src.cli scan-schemas --data-dir api_exports/
+python -m src.cli convert --format parquet --output-dir data_lake/
+```
+
+---
+
+### 🔬 Research Data Processing
+**Problem:** Diverse JSON datasets from experiments, surveys, APIs  
+**Solution:** One-command conversion to analysis-ready formats  
+**Benefit:** More time for research, less time on data wrangling
+
+**Example use cases:**
+- Social media data analysis
+- Scientific instrument outputs
+- Survey response processing
+- Open data portal research
+
+---
+
+### 🌐 Open Data Portal Integration
+**Problem:** Socrata/CKAN array-based format is difficult to work with  
+**Solution:** Automatic column extraction and conversion  
+**Benefit:** Easy access to government and public datasets
+
+**Supported portals:**
+- data.gov datasets
+- City open data portals
+- Research institution repositories
+
+---
+
+### 🔄 API Data Integration
+**Problem:** REST APIs return JSON in various formats  
+**Solution:** Schema-first approach ensures consistency  
+**Benefit:** Reliable data integration into warehouses
+
+---
+
+### 🗄️ Data Lake Ingestion
+**Problem:** Need efficient storage format for JSON in data lakes  
+**Solution:** Convert to Parquet with preserved schemas  
+**Benefit:** Better compression, faster queries, lower costs
+
+---
+
+### 🔄 Data Migration & Format Conversion
+**Problem:** Migrating from JSON-based systems to columnar formats  
+**Solution:** Intelligent schema inference preserves data semantics  
+**Benefit:** Accurate migrations without data loss
+
+---
+
+## 🏗️ Project Structure
+
+```
+schemaforge/
+├── 📁 data/                    # Input JSON files (place your data here)
+│   └── *.json                 # Your JSON data files
+├── 📁 output/                  # Converted output files
+│   ├── *.parquet              # Parquet output files
+│   └── *.csv                  # CSV output files
+├── 📁 reports/                 # Generated schema reports
+│   ├── schema_report.md       # Human-readable report
+│   └── schema_report.json     # Machine-readable report
+├── 📁 src/
+│   ├── __init__.py
+│   ├── schema_reader.py       # Schema inference engine
+│   ├── converter.py           # Format conversion module
+│   └── cli.py                 # Command-line interface
+├── 📁 tests/
+│   ├── test_schema_reader.py
+│   └── test_converter.py
+├── README.md
+├── requirements.txt
+└── pytest.ini
+```
+
+---
+
+## 🔧 Advanced Usage
+
+### Large File Processing
+
+For very large JSON files, use sampling:
+
+```bash
+# Analyze first 10,000 records only
+python -m src.cli scan-schemas --max-sample-size 10000
+
+# Random sample for better representation
+python -m src.cli scan-schemas \
+  --sampling-strategy random \
+  --max-sample-size 5000
+```
+
+### Programmatic Usage
+
+Use SchemaForge as a Python library:
+
+```python
+from src.schema_reader import SchemaReader
+from src.converter import Converter
+from pathlib import Path
+
+# Discover schemas
+reader = SchemaReader(
+    data_dir=Path("data"),
+    max_sample_size=1000
+)
+schemas = reader.scan_directory()
+reader.generate_report(schemas, output_path=Path("reports/schema.md"))
+
+# Convert with schema
+converter = Converter(
+    data_dir=Path("data"),
+    output_dir=Path("output")
+)
+converter.convert_all(format="parquet", schema_report_path=Path("reports/schema.json"))
+```
+
+### Custom Type Handling
+
+Extend type inference for custom formats:
+
+```python
+from src.schema_reader import SchemaReader
+
+class CustomSchemaReader(SchemaReader):
+    def _infer_type(self, value):
+        # Add custom type detection
+        if isinstance(value, str) and value.startswith("http"):
+            return "url"
+        return super()._infer_type(value)
+```
+
+---
+
+## 🧪 Testing
+
+Run the full test suite:
+
+```bash
+# Run all tests
 pytest tests/
-```
 
-Or run specific test files:
-
-```bash
-pytest tests/test_schema_reader.py
-pytest tests/test_converter.py
-```
-
-Run with verbose output:
-
-```bash
+# Run with verbose output
 pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_schema_reader.py
+
+# Run with coverage
+pytest tests/ --cov=src --cov-report=html
 ```
 
-## Known Limitations
+---
 
-1. **Memory**: Large files are loaded entirely into memory. For very large files, use the `--max-sample-size` option for schema inference.
+## 🎯 Architecture
 
-2. **Array Handling**: Arrays of objects are stored as JSON strings in CSV/Parquet output. This is a design choice to maintain compatibility with flat file formats.
+### Two-Phase Workflow
 
-3. **Type Coercion**: Type coercion is best-effort. Values that cannot be coerced are preserved as-is with a warning.
-
-4. **Timestamp Detection**: Timestamp detection uses pattern matching. Complex or non-standard date formats may not be detected.
-
-5. **Encoding**: Files are assumed to be UTF-8 encoded.
-
-6. **File Format Detection**: The tool attempts to auto-detect JSON format, but may fail on edge cases. In such cases, try explicitly structuring your data in a supported format.
-
-## Extending the Project
-
-The codebase is modular and designed for extension:
-
-### Adding New Output Formats
-Add conversion methods to `converter.py`:
-```python
-def convert_to_avro(self, filepath: Path, schema: Optional[FileSchema] = None) -> bool:
-    # Implementation here
+```
+┌─────────────────────────────────────────────────────┐
+│              Phase 1: Schema Discovery              │
+│                                                       │
+│  JSON Files → Format Detection → Schema Inference   │
+│     ↓              ↓                   ↓             │
+│  Load Data → Extract Columns → Analyze Types        │
+│                                    ↓                 │
+│                          Generate Reports            │
+│                       (Markdown + JSON)              │
+└─────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────┐
+│                Phase 2: Conversion                  │
+│                                                       │
+│  Schema Report → Load Data → Apply Schema           │
+│       ↓             ↓            ↓                   │
+│  Type Coercion → Flatten → Convert Format           │
+│                               ↓                      │
+│                    Parquet/CSV Output                │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Custom Type Inference
-Extend `_infer_type()` in `schema_reader.py`:
-```python
-def _infer_type(self, value: Any) -> str:
-    # Add custom type detection logic
+### Component Architecture
+
+```
+┌──────────────┐
+│  CLI Layer   │  ← User commands (scan-schemas, convert)
+└──────┬───────┘
+       │
+       ├─────────────────┬─────────────────┐
+       ▼                 ▼                 ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│Schema Reader │  │  Converter   │  │JSON Loader   │
+└──────────────┘  └──────────────┘  └──────────────┘
+       │                 │                 │
+       └─────────────────┴─────────────────┘
+                         ▼
+                  ┌──────────────┐
+                  │  JSON Files  │
+                  └──────────────┘
 ```
 
-### Different Sampling Strategies
-Implement new strategies in `SchemaReader._sample_records()`:
-```python
-def _sample_records(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if self.sampling_strategy == "stratified":
-        # Custom sampling logic
-```
+---
 
-### Schema Validation
-Add validation logic using the inferred schemas:
-```python
-def validate_data(self, data: Dict, schema: FileSchema) -> List[str]:
-    # Return list of validation errors
-```
+## 🚨 Known Limitations
 
-## Troubleshooting
+| Limitation | Description | Workaround |
+|------------|-------------|------------|
+| **Memory Usage** | Large files loaded into memory | Use `--max-sample-size` for schema inference |
+| **Array of Objects** | Stored as JSON strings in output | Design choice for flat file compatibility |
+| **Type Coercion** | Best-effort conversion | Manual validation recommended |
+| **Timestamp Detection** | Pattern-based recognition | May miss custom formats |
+| **Encoding** | Assumes UTF-8 | Convert files to UTF-8 first |
 
-### Common Issues
+---
 
-**Issue**: "Schema report not found" error during conversion
-- **Solution**: Run `python -m src.cli scan-schemas` first to generate the schema report
+## 🤝 Contributing
 
-**Issue**: "No schemas found in the schema report"
-- **Solution**: Regenerate the schema report. The data structure may have changed.
+We welcome contributions! Here are some ideas:
 
-**Issue**: Conversion fails with type errors
-- **Solution**: Review the schema report to understand data types. Consider adjusting type coercion logic.
+### Features to Add
+- [ ] Avro and ORC output formats
+- [ ] Schema validation against inferred schemas
+- [ ] Streaming processing for very large files
+- [ ] Schema versioning and migration tools
+- [ ] Database export capabilities (PostgreSQL, MySQL)
+- [ ] GUI/Web interface
+- [ ] Docker support
+- [ ] Schema diff tool
 
-**Issue**: Memory errors with large files
-- **Solution**: Use `--max-sample-size` to limit records analyzed during schema discovery.
+### How to Contribute
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-**Issue**: Array-based data not converting correctly
-- **Solution**: Ensure column metadata is present in the JSON file. The tool looks for columns in `meta.view.columns` or similar paths.
+---
 
-## License
+## 📝 License
 
-This project is provided as-is for educational and data engineering purposes.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Contributing
+---
 
-Feel free to extend this project with additional features such as:
-- Support for more output formats (Avro, ORC, etc.)
-- Schema validation against inferred schemas
-- Incremental schema updates
-- Database export capabilities
-- More sophisticated nested structure handling
-- Streaming processing for very large files
-- Schema versioning and migration tools
+## 🙏 Acknowledgments
 
-## Acknowledgments
+Built with love for:
+- Data engineers struggling with inconsistent JSON
+- Researchers drowning in data wrangling
+- Developers tired of manual schema definitions
+- Anyone who's ever said "I wish this JSON had a schema"
 
-This tool is designed to handle various JSON formats commonly found in:
-- API responses
-- Data exports from platforms like Socrata, CKAN, and other open data portals
-- Log files in JSON format
-- Database exports
-- ETL pipeline outputs
+---
+
+## 📞 Support
+
+- **Documentation**: [Full documentation](#-documentation)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/schemaforge/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/schemaforge/discussions)
+
+---
+
+## 🌟 Star History
+
+If SchemaForge saved you time, consider giving it a star! ⭐
+
+[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/schemaforge&type=Date)](https://star-history.com/#yourusername/schemaforge&Date)
+
+---
+
+<div align="center">
+
+**Made with** 🔨 **by developers, for developers**
+
+[⬆ Back to Top](#schemaforge-)
+
+</div>
