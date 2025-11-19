@@ -631,6 +631,7 @@ We welcome contributions! Here are some ideas:
 - [ ] Schema diff tool
 - [ ] Add DuckDB conversion
 - [ ] Add ML task feature
+- [ ] Workload Testing & Benchmarking
 
 ### How to Contribute
 1. Fork the repository
