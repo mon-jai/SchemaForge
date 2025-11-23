@@ -64,7 +64,7 @@ class SchemaValidator:
                     # Extra field (optional: strict mode could flag this)
                     continue
                 
-                expected_type = fields_def[field]['type']
+                expected_type = fields_def[field]['field_type']
                 if not self._validate_type(value, expected_type):
                     error_count += 1
                     if len(errors) < max_errors:
